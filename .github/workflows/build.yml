@@ -1,0 +1,27 @@
+name: Build Zigshot
+
+on: [push]
+
+jobs:
+  zigbuild:
+    runs-on: ubuntu-latest
+
+    container:
+      image: angelofallaria/artix-base
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v3
+      - run: pacman -Syy base-devel wayland wayland-protocols zig git --noconfirm && cd && git clone https://github.com/shinyzenith/zigshot/;cd zigshot && git submodule update --init  && zig build
+        # This is so stupid ^
+
+  zigfmt:
+    runs-on: ubuntu-latest
+
+    container:
+      image: angelofallaria/artix-base
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v2
+      - run: pacman -Syy zig --noconfirm && zig fmt --check src/*.zig
