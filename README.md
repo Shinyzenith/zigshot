@@ -12,5 +12,5 @@ Screenshot tool written in zig for _wayland compositors_ implementing **zwlr_scr
 
 ```console
 $ git clone https://github.com/shinyzenith/zigshot;cd zigshot
-# zig build --prefix /usr/local
+# zig build --prefix /usr/local -Drelease-fast
 ```
