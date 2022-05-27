@@ -1,7 +1,7 @@
 pub const Zigshot = @This();
 
 const std = @import("std");
-const gpa = std.heap.c_allocator;
+const allocator = std.heap.c_allocator;
 
 const wl = @import("wayland").client.wl;
 const zwlr = @import("wayland").client.zwlr;
@@ -23,22 +23,25 @@ shm: ?*wl.Shm = null,
 screencopy_manager: ?*zwlr.ScreencopyManagerV1 = null,
 
 output_global: ?*wl.Output = null,
-valid_outputs: std.ArrayList(OutputInfo),
+// ArrayListUnmanaged doesn't store a reference to allocator so less memory is consumed. We have a global const allocator.
+valid_outputs: std.ArrayListUnmanaged(OutputInfo) = .{},
 
 frame_buffer_done: bool = false,
 frame_buffer_ready: bool = false,
 frame_buffer_failed: bool = false,
-frame_formats: std.ArrayList(FrameData),
+frame_formats: std.ArrayListUnmanaged(FrameData) = .{},
 
 pub fn main() !void {
-    var zigshot: Zigshot = .{ .display = try wl.Display.connect(null), .valid_outputs = std.ArrayList(OutputInfo).init(gpa), .frame_formats = std.ArrayList(FrameData).init(gpa) };
+    var zigshot: Zigshot = .{
+        .display = try wl.Display.connect(null),
+    };
     const registry = try zigshot.display.getRegistry();
     defer {
         registry.destroy();
         zigshot.display.disconnect();
 
-        zigshot.valid_outputs.deinit();
-        zigshot.frame_formats.deinit();
+        zigshot.valid_outputs.deinit(allocator);
+        zigshot.frame_formats.deinit(allocator);
     }
 
     registry.setListener(*@TypeOf(zigshot), registry_listener, &zigshot);
@@ -74,7 +77,8 @@ pub fn main() !void {
     }
     if (supported_format == null) {
         std.debug.print("No formats found that we officially support (xbgr8888, argb8888, xrgb8888). File a GitHub issue for feature requests.", .{});
-        std.os.exit(1);
+        //std.os.exit doesn't call defer statements and leads to memory leak.
+        return;
     }
     //TODO: Handle proper logging and debug flags.
 }
@@ -117,10 +121,10 @@ fn registry_listener(registry: *wl.Registry, event: wl.Registry.Event, app: *Zig
     }
 }
 
-fn output_listener(output: *wl.Output, event: wl.Output.Event, output_list: *std.ArrayList(OutputInfo)) void {
+fn output_listener(output: *wl.Output, event: wl.Output.Event, output_list: *std.ArrayListUnmanaged(OutputInfo)) void {
     switch (event) {
         .name => |ev| {
-            output_list.append(OutputInfo{
+            output_list.append(allocator, OutputInfo{
                 .name = ev.name,
                 .pointer = output,
             }) catch {
@@ -140,7 +144,7 @@ fn frame_listener(_: *zwlr.ScreencopyFrameV1, event: zwlr.ScreencopyFrameV1.Even
             app.*.frame_buffer_ready = true;
         },
         .buffer => |ev| {
-            app.*.frame_formats.append(FrameData{
+            app.*.frame_formats.append(allocator, FrameData{
                 .buffer_format = ev.format,
                 .buffer_height = ev.height,
                 .buffer_width = ev.width,
