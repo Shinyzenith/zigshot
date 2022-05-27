@@ -54,11 +54,29 @@ pub fn main() !void {
         try dispatch(&zigshot);
     }
 
-    // Filter for the frames we support.
-    // Select one of the frames from the list if len !=0
-    // Maybe split errors into a separate zig file as shown by issac in his zig-showtime talk?
-    //
-    // Maybe handle some logging?
+    var supported_format: ?wl.Shm.Format = null;
+    for (zigshot.frame_formats.items) |cap| {
+        switch (cap.buffer_format) {
+            .xbgr8888 => {
+                supported_format = wl.Shm.Format.xbgr8888;
+                break;
+            },
+            .argb8888 => {
+                supported_format = wl.Shm.Format.argb8888;
+                break;
+            },
+            .xrgb8888 => {
+                supported_format = wl.Shm.Format.xrgb8888;
+                break;
+            },
+            else => {},
+        }
+    }
+    if (supported_format == null) {
+        std.debug.print("No formats found that we officially support (xbgr8888, argb8888, xrgb8888). File a GitHub issue for feature requests.", .{});
+        std.os.exit(1);
+    }
+    //TODO: Handle proper logging and debug flags.
 }
 
 fn roundtrip(app: *Zigshot) !void {
