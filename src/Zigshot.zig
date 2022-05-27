@@ -5,10 +5,21 @@ const allocator = std.heap.c_allocator;
 
 const wl = @import("wayland").client.wl;
 const zwlr = @import("wayland").client.zwlr;
+const zxdg = @import("wayland").client.zxdg;
 
 pub const OutputInfo = struct {
     name: [*:0]const u8 = undefined,
     pointer: *wl.Output = undefined,
+
+    // TODO: Eventually use these. Duh!
+    scale: i32 = 1,
+    transform: wl.Output.Transform = undefined,
+
+    x: i32 = 0,
+    y: i32 = 0,
+
+    width: i32 = 0,
+    height: i32 = 0,
 };
 
 pub const FrameData = struct {
@@ -21,6 +32,7 @@ pub const FrameData = struct {
 display: *wl.Display,
 shm: ?*wl.Shm = null,
 screencopy_manager: ?*zwlr.ScreencopyManagerV1 = null,
+output_manager: ?*zxdg.OutputManagerV1 = null,
 
 output_global: ?*wl.Output = null,
 // ArrayListUnmanaged doesn't store a reference to allocator so less memory is consumed. We have a global const allocator.
@@ -81,6 +93,7 @@ pub fn main() !void {
         return;
     }
     //TODO: Handle proper logging and debug flags.
+    //TODO: Add callback to each wl_output to check for x, y, width, height in global compositor space.
 }
 
 fn roundtrip(app: *Zigshot) !void {
@@ -115,6 +128,8 @@ fn registry_listener(registry: *wl.Registry, event: wl.Registry.Event, app: *Zig
                 app.*.output_global = registry.bind(global.name, wl.Output, 4) catch return;
             } else if (std.cstr.cmp(global.interface, wl.Shm.getInterface().name) == 0) {
                 app.*.shm = registry.bind(global.name, wl.Shm, 1) catch return;
+            } else if (std.cstr.cmp(global.interface, zxdg.OutputManagerV1.getInterface().name) == 0) {
+                app.*.output_manager = registry.bind(global.name, zxdg.OutputManagerV1, 3) catch return;
             }
         },
         .global_remove => {},
@@ -124,12 +139,16 @@ fn registry_listener(registry: *wl.Registry, event: wl.Registry.Event, app: *Zig
 fn output_listener(output: *wl.Output, event: wl.Output.Event, output_list: *std.ArrayListUnmanaged(OutputInfo)) void {
     switch (event) {
         .name => |ev| {
-            output_list.append(allocator, OutputInfo{
-                .name = ev.name,
-                .pointer = output,
-            }) catch {
-                @panic("Failed to allocate memory.");
-            };
+            const ptr = findOutputItemByPointer(output_list, output);
+            ptr.name = ev.name;
+        },
+        .scale => |ev| {
+            const ptr = findOutputItemByPointer(output_list, output);
+            ptr.scale = ev.factor;
+        },
+        .geometry => |ev| {
+            const ptr = findOutputItemByPointer(output_list, output);
+            ptr.transform = ev.transform;
         },
         else => {},
     }
@@ -158,4 +177,14 @@ fn frame_listener(_: *zwlr.ScreencopyFrameV1, event: zwlr.ScreencopyFrameV1.Even
         },
         else => {},
     }
+}
+pub fn findOutputItemByPointer(infos: *std.ArrayListUnmanaged(OutputInfo), output: *wl.Output) *OutputInfo {
+    for (infos.items) |*item| {
+        if (item.pointer == output) {
+            return item;
+        }
+    }
+    const ptr = infos.addOne(allocator) catch @panic("out of memory");
+    ptr.* = OutputInfo{ .pointer = output };
+    return ptr;
 }

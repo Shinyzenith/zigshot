@@ -11,7 +11,9 @@ pub fn build(b: *std.build.Builder) void {
     const scanner = ScanProtocolsStep.create(b);
 
     // Generate the bindings we need.
+    scanner.addSystemProtocol("unstable/xdg-output/xdg-output-unstable-v1.xml");
     scanner.addProtocolPath("deps/wlr-protocols/unstable/wlr-screencopy-unstable-v1.xml");
+    scanner.generate("zxdg_output_manager_v1", 3);
     scanner.generate("zwlr_screencopy_manager_v1", 3);
     scanner.generate("wl_output", 4);
     scanner.generate("wl_shm", 1);
