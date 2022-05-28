@@ -93,4 +93,5 @@ pub fn main() !void {
     }
     //TODO: Handle proper logging and debug flags.
     //TODO: Add callback to each wl_output to check for x, y, width, height in global compositor space from xdg_output_manager.
+    std.debug.print("{}", .{try Utils.allocate_shm_file(1920)});
 }
