@@ -5,6 +5,9 @@ const Listeners = @import("Listeners.zig");
 const std = @import("std");
 pub const allocator = std.heap.c_allocator;
 
+const mman = @cImport(@cInclude("sys/mman.h"));
+const unistd = @cImport(@cInclude("unistd.h"));
+
 const wl = @import("wayland").client.wl;
 const zwlr = @import("wayland").client.zwlr;
 const zxdg = @import("wayland").client.zxdg;
@@ -69,29 +72,49 @@ pub fn main() !void {
         try Utils.dispatch(&zigshot);
     }
 
-    var supported_format: ?wl.Shm.Format = null;
-    for (zigshot.frame_formats.items) |cap| {
-        switch (cap.buffer_format) {
-            .xbgr8888 => {
-                supported_format = wl.Shm.Format.xbgr8888;
-                break;
-            },
-            .argb8888 => {
-                supported_format = wl.Shm.Format.argb8888;
-                break;
-            },
-            .xrgb8888 => {
-                supported_format = wl.Shm.Format.xrgb8888;
+    var supported_frame: ?FrameData = null;
+    for (zigshot.frame_formats.items) |capture| {
+        switch (capture.buffer_format) {
+            .xbgr8888, .argb8888, .xrgb8888 => {
+                supported_frame = capture;
                 break;
             },
             else => {},
         }
     }
-    if (supported_format == null) {
-        std.debug.print("No formats found that we officially support (xbgr8888, argb8888, xrgb8888). File a GitHub issue for feature requests.", .{});
+    if (supported_frame == null) {
+        std.debug.print("No formats found that we officially support (xbgr8888, argb8888, xrgb8888). File a GitHub issue for feature requests.\n", .{});
         return;
+    }
+
+    const frame_bytes = supported_frame.?.buffer_stride * supported_frame.?.buffer_height;
+    const fd = try Utils.allocate_shm_file(frame_bytes);
+    defer _ = unistd.close(fd);
+    const data = mman.mmap(null, frame_bytes, mman.PROT_READ | mman.PROT_WRITE, mman.MAP_SHARED, fd, 0);
+    defer _ = mman.munmap(data, frame_bytes);
+    const shm_pool = try zigshot.shm.?.createPool(fd, @bitCast(i32, @truncate(u32, frame_bytes)));
+    var buffer = try shm_pool.createBuffer(
+        0,
+        @bitCast(i32, @truncate(u32, supported_frame.?.buffer_width)),
+        @bitCast(i32, @truncate(u32, supported_frame.?.buffer_height)),
+        @bitCast(i32, @truncate(u32, supported_frame.?.buffer_stride)),
+        supported_frame.?.buffer_format,
+    );
+    //defer wl.Buffer.Destroy(buffer);
+
+    frame.copy(buffer);
+    try Utils.dispatch(&zigshot);
+
+    while (true) {
+        if (zigshot.frame_buffer_failed) {
+            std.debug.print("Faied to copy frame data into buffer.\n", .{});
+            return;
+        }
+        if (zigshot.frame_buffer_ready) {
+            std.debug.print("READY!\n", .{});
+            return;
+        }
     }
     //TODO: Handle proper logging and debug flags.
     //TODO: Add callback to each wl_output to check for x, y, width, height in global compositor space from xdg_output_manager.
-    std.debug.print("{}", .{try Utils.allocate_shm_file(1920)});
 }

@@ -9,7 +9,7 @@ const fcntl = @cImport(@cInclude("fcntl.h"));
 const mman = @cImport(@cInclude("sys/mman.h"));
 const unistd = @cImport(@cInclude("unistd.h"));
 
-pub fn allocate_shm_file(size: u64) !isize {
+pub fn allocate_shm_file(size: u64) !i32 {
     const fd = @bitCast(c_int, @truncate(c_int, try create_shm_fd()));
     while (true) {
         if (unistd.ftruncate(fd, @bitCast(c_long, size)) == 0) {
@@ -19,13 +19,14 @@ pub fn allocate_shm_file(size: u64) !isize {
             return error.FailedToFTruncateAndCloseFd;
         }
     }
+    mman.mmap(null, size, mman.PROT_READ | mman.PROT_WRITE, mman.MAP_SHARED, fd, 0);
 }
 
-fn create_shm_fd() !isize {
+fn create_shm_fd() !i32 {
     while (true) {
         const shm_name = try generate_random_name();
         defer Zigshot.allocator.free(shm_name);
-        const fd = mman.shm_open(shm_name.ptr, fcntl.O_RDWR | fcntl.O_CREAT | fcntl.O_EXCL, 0600);
+        const fd = mman.shm_open(shm_name.ptr, fcntl.O_RDWR | fcntl.O_CREAT | fcntl.O_EXCL, fcntl.S_IRUSR | fcntl.S_IWUSR);
         if (fd >= 0) {
             if (mman.shm_unlink(shm_name.ptr) == 0) {
                 return fd;
