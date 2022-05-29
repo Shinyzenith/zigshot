@@ -3,10 +3,9 @@ const Utils = @import("Utils.zig");
 const Listeners = @import("Listeners.zig");
 
 const std = @import("std");
+const os = std.os;
+const mem = std.mem;
 pub const allocator = std.heap.c_allocator;
-
-const mman = @cImport(@cInclude("sys/mman.h"));
-const unistd = @cImport(@cInclude("unistd.h"));
 
 const wl = @import("wayland").client.wl;
 const zwlr = @import("wayland").client.zwlr;
@@ -88,10 +87,17 @@ pub fn main() !void {
     }
 
     const frame_bytes = supported_frame.?.buffer_stride * supported_frame.?.buffer_height;
-    const fd = try Utils.allocate_shm_file(frame_bytes);
-    defer _ = unistd.close(fd);
-    const data = mman.mmap(null, frame_bytes, mman.PROT_READ | mman.PROT_WRITE, mman.MAP_SHARED, fd, 0);
-    defer _ = mman.munmap(data, frame_bytes);
+
+    const fd = try Utils.create_shm_fd();
+    defer os.close(fd);
+
+    try os.ftruncate(fd, frame_bytes);
+
+    _ = mem.bytesAsSlice(
+        u32,
+        try os.mmap(null, frame_bytes, os.PROT.READ | os.PROT.WRITE, os.MAP.SHARED, fd, 0),
+    );
+
     const shm_pool = try zigshot.shm.?.createPool(fd, @bitCast(i32, @truncate(u32, frame_bytes)));
     var buffer = try shm_pool.createBuffer(
         0,
@@ -100,7 +106,6 @@ pub fn main() !void {
         @bitCast(i32, @truncate(u32, supported_frame.?.buffer_stride)),
         supported_frame.?.buffer_format,
     );
-    //defer wl.Buffer.Destroy(buffer);
 
     frame.copy(buffer);
     try Utils.dispatch(&zigshot);
@@ -111,7 +116,6 @@ pub fn main() !void {
             return;
         }
         if (zigshot.frame_buffer_ready) {
-            std.debug.print("READY!\n", .{});
             return;
         }
     }
