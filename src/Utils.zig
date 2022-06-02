@@ -7,7 +7,7 @@ const wl = @import("wayland").client.wl;
 
 pub fn create_shm_fd() !os.fd_t {
     switch (builtin.target.os.tag) {
-        .linux => {
+        .linux, .freebsd => {
             const name = try generate_random_name();
             return os.memfd_create(name, os.linux.MFD_CLOEXEC);
         },
