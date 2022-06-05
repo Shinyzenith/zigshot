@@ -99,6 +99,7 @@ pub fn main() !void {
     );
 
     const shm_pool = try zigshot.shm.?.createPool(fd, @bitCast(i32, @truncate(u32, frame_bytes)));
+    defer shm_pool.destroy();
     var buffer = try shm_pool.createBuffer(
         0,
         @bitCast(i32, @truncate(u32, supported_frame.?.buffer_width)),
@@ -115,9 +116,7 @@ pub fn main() !void {
             std.debug.print("Faied to copy frame data into buffer.\n", .{});
             return;
         }
-        if (zigshot.frame_buffer_ready) {
-            return;
-        }
+        if (zigshot.frame_buffer_ready) {}
     }
     //TODO: Handle proper logging and debug flags.
     //TODO: Add callback to each wl_output to check for x, y, width, height in global compositor space from xdg_output_manager.

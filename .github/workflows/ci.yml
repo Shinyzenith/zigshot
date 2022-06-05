@@ -1,0 +1,42 @@
+name: Build Zigshot
+
+on: [push]
+
+jobs:
+  zigbuild:
+    runs-on: ubuntu-latest
+    name: "Build!"
+    env:
+      WAYLAND: 1.20.0
+      WAYLAND_PROTOCOLS: 1.24
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install --no-install-recommends ninja-build
+          sudo snap install zig --classic --edge
+          sudo pip -q install meson
+
+      - name: Build wayland
+        run: |
+          wget -q --no-check-certificate https://wayland.freedesktop.org/releases/wayland-$WAYLAND.tar.xz
+          tar -xJf wayland-$WAYLAND.tar.xz
+          cd wayland-$WAYLAND
+          meson build -Ddocumentation=false --prefix=/usr
+          ninja -C build
+          sudo ninja -C build install
+      - name: Build wayland-protocols
+        run: |
+          wget -q --no-check-certificate https://wayland.freedesktop.org/releases/wayland-protocols-$WAYLAND_PROTOCOLS.tar.xz
+          tar -xJf wayland-protocols-$WAYLAND_PROTOCOLS.tar.xz
+          cd wayland-protocols-$WAYLAND_PROTOCOLS
+          meson build -Dtests=false --prefix=/usr
+          ninja -C build
+          sudo ninja -C build install
+      - uses: actions/checkout@v3
+      - name: Building the app
+        run: |
+          git submodule update --init
+          zig fmt --check src/*.zig
+          zig build -Drelease-fast
